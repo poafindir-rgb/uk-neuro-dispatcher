@@ -6,7 +6,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIResponse } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const GEMINI_API_KEY = "AIzaSyA1yKH1RweT4T0lF4O_vacPF9zx0Girq5Q";
+
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 const SYSTEM_PROMPT = `
 Вы — интеллектуальный ассистент диспетчерской службы ЖКХ "Нейро-диспетчер".
