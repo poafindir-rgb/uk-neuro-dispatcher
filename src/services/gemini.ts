@@ -48,7 +48,7 @@ const SYSTEM_PROMPT = `
 export async function processResidentMessage(message: string, history: { role: 'user' | 'model', content: string }[] = []): Promise<AIResponse> {
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: [
         { role: 'user', parts: [{ text: SYSTEM_PROMPT }] },
         ...history.map(h => ({ role: h.role, parts: [{ text: h.content }] })),
