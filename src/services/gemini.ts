@@ -6,7 +6,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIResponse } from "../types";
 
-const GEMINI_API_KEY = "AIzaSyA1yKH1RweT4T0lF4O_vacPF9zx0Girq5Q";
+const BACKEND_URL = "https://uk-neuro-dispatcher-backend.vercel.app/api/analyze";
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
