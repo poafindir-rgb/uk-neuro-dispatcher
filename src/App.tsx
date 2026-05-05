@@ -3,29 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  LayoutDashboard, 
-  Inbox as InboxIcon, 
-  Ticket as TicketIcon, 
-  CheckSquare, 
-  Map as MapIcon, 
-  BarChart3, 
-  Users, 
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  LayoutDashboard,
+  Inbox as InboxIcon,
+  CheckSquare,
+  Map as MapIcon,
+  BarChart3,
   LogOut,
-  Bell,
-  Search,
-  Plus,
-  ArrowRight,
-  ShieldAlert,
-  Clock,
-  CheckCircle2,
-  AlertCircle
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Badge, Card, Button, cn } from './components/UI';
-import { Role, Ticket, Task, Team, TicketStatus } from './types';
+
+import { cn } from './components/UI';
+import { Role, Ticket, Task, Team } from './types';
 import { DEMO_TICKETS, DEMO_TASKS, DEMO_TEAMS } from './constants';
+
 import Dashboard from './components/Dashboard';
 import Inbox from './components/Inbox';
 import TicketDetail from './components/TicketDetail';
@@ -36,214 +27,381 @@ import ResidentPortal from './components/ResidentPortal';
 
 type Tab = 'dashboard' | 'inbox' | 'ticket' | 'tasks' | 'route' | 'analytics';
 
+const TICKETS_STORAGE_KEY = 'tickets';
+const TASKS_STORAGE_KEY = 'tasks';
+
+function safeLoadTickets(): Ticket[] {
+  try {
+    const saved = localStorage.getItem(TICKETS_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : DEMO_TICKETS;
+  } catch (error) {
+    console.error('Ошибка загрузки tickets из localStorage:', error);
+    return DEMO_TICKETS;
+  }
+}
+
+function safeLoadTasks(): Task[] {
+  try {
+    const saved = localStorage.getItem(TASKS_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : DEMO_TASKS;
+  } catch (error) {
+    console.error('Ошибка загрузки tasks из localStorage:', error);
+    return DEMO_TASKS;
+  }
+}
+
+function saveTickets(tickets: Ticket[]) {
+  try {
+    localStorage.setItem(TICKETS_STORAGE_KEY, JSON.stringify(tickets));
+  } catch (error) {
+    console.error('Ошибка сохранения tickets в localStorage:', error);
+  }
+}
+
+function saveTasks(tasks: Task[]) {
+  try {
+    localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
+  } catch (error) {
+    console.error('Ошибка сохранения tasks в localStorage:', error);
+  }
+}
+
+function pickTeamForTicket(ticket: Ticket, teams: Team[]): string {
+  const matchedTeam = teams.find((team) =>
+    team.specialization.includes(ticket.type)
+  );
+
+  return matchedTeam?.id || teams[0]?.id || 'team-1';
+}
+
+function buildTaskFromTicket(ticket: Ticket, teams: Team[]): Task {
+  const teamId = pickTeamForTicket(ticket, teams);
+
+  return {
+    id: `TSK-${Date.now()}`,
+    ticketId: ticket.id,
+    teamId,
+    title: `${ticket.subtype || 'Новое обращение'} — ${
+      ticket.address || 'Адрес не указан'
+    }`,
+    status: 'TODO',
+    deadline: ticket.slaResolutionDeadline,
+    instructions: [
+      `Проверить обращение: ${ticket.description || 'Описание не указано'}`,
+      `Связаться с жильцом: ${ticket.residentName || 'Житель'} / ${
+        ticket.phone || 'телефон не указан'
+      }`,
+      'Уточнить доступ в помещение или на объект',
+      'Зафиксировать результат выполнения',
+    ],
+  };
+}
+
 export default function App() {
   const [role, setRole] = useState<Role>('DISPATCHER');
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [teams, setTeams] = useState<Team[]>(DEMO_TEAMS);
+  const [teams] = useState<Team[]>(DEMO_TEAMS);
+
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
-  // Persistence
   useEffect(() => {
-    const savedTickets = localStorage.getItem('tickets');
-    const savedTasks = localStorage.getItem('tasks');
-    if (savedTickets) {
-      setTickets(JSON.parse(savedTickets));
-    } else {
-      setTickets(DEMO_TICKETS);
-    }
-    if (savedTasks) {
-      setTasks(JSON.parse(savedTasks));
-    } else {
-      setTasks(DEMO_TASKS);
-    }
+    setTickets(safeLoadTickets());
+    setTasks(safeLoadTasks());
   }, []);
 
-  useEffect(() => {
-    if (tickets.length > 0) localStorage.setItem('tickets', JSON.stringify(tickets));
-  }, [tickets]);
-
-  useEffect(() => {
-    if (tasks.length > 0) localStorage.setItem('tasks', JSON.stringify(tasks));
-  }, [tasks]);
-
   const updateTicket = (id: string, updates: Partial<Ticket>) => {
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t));
+    setTickets((prev) => {
+      const updatedTickets = prev.map((ticket) =>
+        ticket.id === id
+          ? {
+              ...ticket,
+              ...updates,
+              updatedAt: new Date().toISOString(),
+            }
+          : ticket
+      );
+
+      saveTickets(updatedTickets);
+      return updatedTickets;
+    });
   };
 
   const addTicket = (newTicket: Ticket) => {
-    setTickets(prev => [newTicket, ...prev]);
+    const ticketWithDates: Ticket = {
+      ...newTicket,
+      createdAt: newTicket.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setTickets((prev) => {
+      const withoutDuplicate = prev.filter(
+        (ticket) => ticket.id !== ticketWithDates.id
+      );
+
+      const updatedTickets = [ticketWithDates, ...withoutDuplicate];
+      saveTickets(updatedTickets);
+
+      return updatedTickets;
+    });
+
+    const autoTask = buildTaskFromTicket(ticketWithDates, teams);
+
+    setTasks((prev) => {
+      const alreadyHasTask = prev.some(
+        (task) => task.ticketId === ticketWithDates.id
+      );
+
+      if (alreadyHasTask) {
+        return prev;
+      }
+
+      const updatedTasks = [autoTask, ...prev];
+      saveTasks(updatedTasks);
+
+      return updatedTasks;
+    });
   };
 
   const addTask = (newTask: Task) => {
-    setTasks(prev => [...prev, newTask]);
+    setTasks((prev) => {
+      const withoutDuplicate = prev.filter((task) => task.id !== newTask.id);
+      const updatedTasks = [newTask, ...withoutDuplicate];
+
+      saveTasks(updatedTasks);
+      return updatedTasks;
+    });
   };
 
   const updateTask = (id: string, updates: Partial<Task>) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    setTasks((prev) => {
+      const updatedTasks = prev.map((task) =>
+        task.id === id ? { ...task, ...updates } : task
+      );
+
+      saveTasks(updatedTasks);
+      return updatedTasks;
+    });
   };
 
-  const selectedTicket = useMemo(() => 
-    tickets.find(t => t.id === selectedTicketId), 
+  const selectedTicket = useMemo(
+    () => tickets.find((ticket) => ticket.id === selectedTicketId),
     [tickets, selectedTicketId]
   );
 
-  const navigations = [
-    { id: 'dashboard', label: 'Дашборд', icon: LayoutDashboard, roles: ['DISPATCHER', 'MANAGER'] },
-    { id: 'inbox', label: 'Входящие', icon: InboxIcon, roles: ['DISPATCHER'] },
-    { id: 'tasks', label: 'Задачи', icon: CheckSquare, roles: ['DISPATCHER', 'TECHNICIAN'] },
-    { id: 'route', label: 'Маршруты', icon: MapIcon, roles: ['DISPATCHER', 'TECHNICIAN'] },
-    { id: 'analytics', label: 'Аналитика', icon: BarChart3, roles: ['MANAGER'] },
+  const navigations: {
+    id: Tab;
+    label: string;
+    icon: React.ElementType;
+    roles: Role[];
+  }[] = [
+    {
+      id: 'dashboard',
+      label: 'Дашборд',
+      icon: LayoutDashboard,
+      roles: ['DISPATCHER', 'MANAGER'],
+    },
+    {
+      id: 'inbox',
+      label: 'Входящие',
+      icon: InboxIcon,
+      roles: ['DISPATCHER'],
+    },
+    {
+      id: 'tasks',
+      label: 'Задачи',
+      icon: CheckSquare,
+      roles: ['DISPATCHER', 'TECHNICIAN'],
+    },
+    {
+      id: 'route',
+      label: 'Маршруты',
+      icon: MapIcon,
+      roles: ['DISPATCHER', 'TECHNICIAN'],
+    },
+    {
+      id: 'analytics',
+      label: 'Аналитика',
+      icon: BarChart3,
+      roles: ['MANAGER'],
+    },
   ];
 
-  const filteredNav = navigations.filter(n => n.roles.includes(role as any));
+  const filteredNav = navigations.filter((item) => item.roles.includes(role));
 
   if (role === 'RESIDENT') {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <RoleSwitcher role={role} setRole={setRole} />
-        <ResidentPortal tickets={tickets} addTicket={addTicket} updateTicket={updateTicket} />
-      </div>
+      <ResidentPortal
+        tickets={tickets}
+        addTicket={addTicket}
+        updateTicket={updateTicket}
+      />
     );
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col">
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <ShieldAlert className="text-white w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold leading-tight">Facility Desk</h1>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold italic">Нейро-диспетчер</p>
-            </div>
+      <aside className="w-72 bg-slate-950 text-white min-h-screen p-5 flex flex-col">
+        <div className="mb-8">
+          <div className="text-2xl font-black tracking-tight">
+            Facility Desk
           </div>
-
-          <nav className="space-y-1">
-            {filteredNav.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id as any)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
-                  activeTab === item.id 
-                    ? "bg-blue-600 text-white" 
-                    : "text-slate-400 hover:text-white hover:bg-slate-800"
-                )}
-              >
-                <item.icon size={20} />
-                <span className="font-medium">{item.label}</span>
-              </button>
-            ))}
-          </nav>
+          <div className="text-sm text-slate-400 mt-1">Нейро-диспетчер</div>
         </div>
 
-        <div className="mt-auto p-6 space-y-4">
-          <div className="bg-slate-800 rounded-xl p-4">
-            <p className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-bold">Смена роли</p>
+        <nav className="space-y-2">
+          {filteredNav.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (item.id !== 'ticket') {
+                    setSelectedTicketId(null);
+                  }
+                }}
+                className={cn(
+                  'w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left',
+                  activeTab === item.id
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                )}
+              >
+                <Icon size={20} />
+                <span className="font-bold">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="mt-auto space-y-4">
+          <div className="bg-slate-900 rounded-2xl p-4">
+            <div className="text-xs text-slate-500 uppercase tracking-widest mb-3">
+              Смена роли
+            </div>
+
             <RoleSwitcher role={role} setRole={setRole} compact />
           </div>
-          <button className="flex items-center gap-3 text-slate-400 hover:text-white px-4 py-2 w-full">
+
+          <button
+            onClick={() => setRole('RESIDENT')}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white transition-all"
+          >
             <LogOut size={18} />
-            <span>Выйти</span>
+            <span className="font-bold">Выйти</span>
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 min-w-0">
         {/* Header */}
-        <header className="h-16 bg-white border-bottom border-slate-200 flex items-center justify-between px-8 shrink-0">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="relative w-96">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                type="text" 
-                placeholder="Поиск по ID, адресу или фамилии..." 
-                className="w-full bg-slate-100 border-none rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-blue-500 transition-all"
-              />
+        <header className="bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between sticky top-0 z-30">
+          <div>
+            <div className="text-sm text-slate-500 font-semibold">
+              Текущая роль
             </div>
+            <h1 className="text-2xl font-black tracking-tight">
+              {role === 'DISPATCHER'
+                ? 'Диспетчер Ольга'
+                : role === 'MANAGER'
+                  ? 'Иван Сергеевич'
+                  : 'Мастер Николай'}
+            </h1>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="relative w-10 h-10 flex items-center justify-center text-slate-400 hover:text-slate-900 bg-slate-100 rounded-full transition-all">
-              <Bell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-            </button>
-            <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-              <div className="text-right">
-                <p className="text-sm font-bold text-slate-900 leading-none">{role === 'DISPATCHER' ? 'Диспетчер Ольга' : role === 'MANAGER' ? 'Иван Сергеевич' : 'Мастер Николай'}</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{role}</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden">
-                <img src={`https://picsum.photos/seed/${role}/100/100`} referrerPolicy="no-referrer" alt="Avatar" />
-              </div>
+
+          <div className="flex items-center gap-3">
+            <div className="px-4 py-2 rounded-full bg-slate-100 text-slate-700 text-xs font-black uppercase tracking-widest">
+              {role}
             </div>
+
+            <RoleSwitcher role={role} setRole={setRole} />
           </div>
         </header>
 
         {/* View Content */}
-        <div className="flex-1 overflow-y-auto bg-slate-50/50 p-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab + (selectedTicketId || '')}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="h-full"
-            >
-              {activeTab === 'dashboard' && <Dashboard tickets={tickets} tasks={tasks} teams={teams} />}
-              {activeTab === 'inbox' && (
-                <Inbox 
-                  tickets={tickets} 
-                  onSelectTicket={(id) => {
-                    setSelectedTicketId(id);
-                    setActiveTab('ticket');
-                  }} 
-                />
-              )}
-              {activeTab === 'ticket' && (
-                <TicketDetail 
-                  ticket={selectedTicket} 
-                  onBack={() => setActiveTab('inbox')} 
-                  onUpdate={(updates) => selectedTicketId && updateTicket(selectedTicketId, updates)}
-                  teams={teams}
-                  onAssignTask={addTask}
-                />
-              )}
-              {activeTab === 'tasks' && <TasksKanban tasks={tasks} onUpdateTask={updateTask} tickets={tickets} />}
-              {activeTab === 'route' && <RouteMap tickets={tickets} teams={teams} />}
-              {activeTab === 'analytics' && <Analytics tickets={tickets} />}
-            </motion.div>
-          </AnimatePresence>
-        </div>
+        <section className="p-8">
+          {activeTab === 'dashboard' && (
+            <Dashboard tickets={tickets} tasks={tasks} teams={teams} />
+          )}
+
+          {activeTab === 'inbox' && (
+            <Inbox
+              tickets={tickets}
+              onSelectTicket={(id) => {
+                setSelectedTicketId(id);
+                setActiveTab('ticket');
+              }}
+            />
+          )}
+
+          {activeTab === 'ticket' && (
+            <TicketDetail
+              ticket={selectedTicket}
+              onBack={() => {
+                setSelectedTicketId(null);
+                setActiveTab('inbox');
+              }}
+              onUpdate={(updates) => {
+                if (selectedTicketId) {
+                  updateTicket(selectedTicketId, updates);
+                }
+              }}
+              teams={teams}
+              onAssignTask={addTask}
+            />
+          )}
+
+          {activeTab === 'tasks' && (
+            <TasksKanban
+              tasks={tasks}
+              onUpdateTask={updateTask}
+              tickets={tickets}
+            />
+          )}
+
+          {activeTab === 'route' && (
+            <RouteMap tickets={tickets} teams={teams} />
+          )}
+
+          {activeTab === 'analytics' && <Analytics tickets={tickets} />}
+        </section>
       </main>
     </div>
   );
 }
 
-function RoleSwitcher({ role, setRole, compact }: { role: Role; setRole: (r: Role) => void; compact?: boolean }) {
+function RoleSwitcher({
+  role,
+  setRole,
+  compact,
+}: {
+  role: Role;
+  setRole: (role: Role) => void;
+  compact?: boolean;
+}) {
   const roles: Role[] = ['RESIDENT', 'DISPATCHER', 'TECHNICIAN', 'MANAGER'];
-  
+
   if (compact) {
     return (
-      <div className="grid grid-cols-2 gap-1">
-        {roles.map(r => (
-          <button 
-            key={r}
-            onClick={() => setRole(r)}
+      <div className="grid grid-cols-2 gap-2">
+        {roles.map((item) => (
+          <button
+            key={item}
+            onClick={() => setRole(item)}
             className={cn(
-              "px-1 py-1.5 text-[9px] font-bold rounded-lg transition-all uppercase tracking-tighter",
-              role === r 
-                ? "bg-blue-600 text-white" 
-                : "bg-slate-700 text-slate-400 hover:text-white"
+              'px-2 py-2 text-[10px] font-black rounded-lg transition-all uppercase tracking-tighter',
+              role === item
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-white'
             )}
           >
-            {r}
+            {item}
           </button>
         ))}
       </div>
@@ -251,19 +409,19 @@ function RoleSwitcher({ role, setRole, compact }: { role: Role; setRole: (r: Rol
   }
 
   return (
-    <div className="fixed top-4 right-4 z-[9999] bg-white p-1 rounded-full shadow-xl border border-slate-200 flex gap-1">
-      {roles.map(r => (
-        <button 
-          key={r}
-          onClick={() => setRole(r)}
+    <div className="flex items-center gap-2">
+      {roles.map((item) => (
+        <button
+          key={item}
+          onClick={() => setRole(item)}
           className={cn(
-            "px-3 py-1.5 text-[10px] font-bold rounded-full transition-all uppercase tracking-wider",
-            role === r 
-              ? "bg-slate-900 text-white" 
-              : "text-slate-500 hover:bg-slate-100"
+            'px-3 py-1.5 text-[10px] font-black rounded-full transition-all uppercase tracking-wider',
+            role === item
+              ? 'bg-slate-900 text-white'
+              : 'text-slate-500 hover:bg-slate-100'
           )}
         >
-          {r}
+          {item}
         </button>
       ))}
     </div>
