@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenAI, Type } from "@google/genai";
+
 import { AIResponse } from "../types";
 
 const BACKEND_URL = "https://uk-neuro-dispatcher-backend.vercel.app/api/analyze";
 
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
 
 const SYSTEM_PROMPT = `
 Вы — интеллектуальный ассистент диспетчерской службы ЖКХ "Нейро-диспетчер".
