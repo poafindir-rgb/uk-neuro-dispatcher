@@ -30,27 +30,27 @@ type Tab = 'dashboard' | 'inbox' | 'ticket' | 'tasks' | 'route' | 'analytics';
 const TICKETS_STORAGE_KEY = 'tickets';
 const TASKS_STORAGE_KEY = 'tasks';
 
-function safeLoadTickets(): Ticket[] {
+function loadTicketsFromLocalStorage(): Ticket[] {
   try {
-    const saved = localStorage.getItem(TICKETS_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : DEMO_TICKETS;
+    const savedTickets = localStorage.getItem(TICKETS_STORAGE_KEY);
+    return savedTickets ? JSON.parse(savedTickets) : DEMO_TICKETS;
   } catch (error) {
     console.error('Ошибка загрузки tickets из localStorage:', error);
     return DEMO_TICKETS;
   }
 }
 
-function safeLoadTasks(): Task[] {
+function loadTasksFromLocalStorage(): Task[] {
   try {
-    const saved = localStorage.getItem(TASKS_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : DEMO_TASKS;
+    const savedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
+    return savedTasks ? JSON.parse(savedTasks) : DEMO_TASKS;
   } catch (error) {
     console.error('Ошибка загрузки tasks из localStorage:', error);
     return DEMO_TASKS;
   }
 }
 
-function saveTickets(tickets: Ticket[]) {
+function saveTicketsToLocalStorage(tickets: Ticket[]) {
   try {
     localStorage.setItem(TICKETS_STORAGE_KEY, JSON.stringify(tickets));
   } catch (error) {
@@ -58,7 +58,7 @@ function saveTickets(tickets: Ticket[]) {
   }
 }
 
-function saveTasks(tasks: Task[]) {
+function saveTasksToLocalStorage(tasks: Task[]) {
   try {
     localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
   } catch (error) {
@@ -91,7 +91,7 @@ function buildTaskFromTicket(ticket: Ticket, teams: Team[]): Task {
       `Связаться с жильцом: ${ticket.residentName || 'Житель'} / ${
         ticket.phone || 'телефон не указан'
       }`,
-      'Уточнить доступ в помещение или на объект',
+      'Уточнить доступ к объекту',
       'Зафиксировать результат выполнения',
     ],
   };
@@ -108,8 +108,8 @@ export default function App() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
   useEffect(() => {
-    setTickets(safeLoadTickets());
-    setTasks(safeLoadTasks());
+    setTickets(loadTicketsFromLocalStorage());
+    setTasks(loadTasksFromLocalStorage());
   }, []);
 
   const updateTicket = (id: string, updates: Partial<Ticket>) => {
@@ -124,7 +124,7 @@ export default function App() {
           : ticket
       );
 
-      saveTickets(updatedTickets);
+      saveTicketsToLocalStorage(updatedTickets);
       return updatedTickets;
     });
   };
@@ -142,8 +142,8 @@ export default function App() {
       );
 
       const updatedTickets = [ticketWithDates, ...withoutDuplicate];
-      saveTickets(updatedTickets);
 
+      saveTicketsToLocalStorage(updatedTickets);
       return updatedTickets;
     });
 
@@ -159,8 +159,8 @@ export default function App() {
       }
 
       const updatedTasks = [autoTask, ...prev];
-      saveTasks(updatedTasks);
 
+      saveTasksToLocalStorage(updatedTasks);
       return updatedTasks;
     });
   };
@@ -170,7 +170,7 @@ export default function App() {
       const withoutDuplicate = prev.filter((task) => task.id !== newTask.id);
       const updatedTasks = [newTask, ...withoutDuplicate];
 
-      saveTasks(updatedTasks);
+      saveTasksToLocalStorage(updatedTasks);
       return updatedTasks;
     });
   };
@@ -181,7 +181,7 @@ export default function App() {
         task.id === id ? { ...task, ...updates } : task
       );
 
-      saveTasks(updatedTasks);
+      saveTasksToLocalStorage(updatedTasks);
       return updatedTasks;
     });
   };
@@ -233,11 +233,24 @@ export default function App() {
 
   if (role === 'RESIDENT') {
     return (
-      <ResidentPortal
-        tickets={tickets}
-        addTicket={addTicket}
-        updateTicket={updateTicket}
-      />
+      <div className="relative min-h-screen">
+        <button
+          onClick={() => {
+            setRole('DISPATCHER');
+            setActiveTab('inbox');
+            setSelectedTicketId(null);
+          }}
+          className="fixed top-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-all"
+        >
+          Режим диспетчера
+        </button>
+
+        <ResidentPortal
+          tickets={tickets}
+          addTicket={addTicket}
+          updateTicket={updateTicket}
+        />
+      </div>
     );
   }
 
@@ -261,6 +274,7 @@ export default function App() {
                 key={item.id}
                 onClick={() => {
                   setActiveTab(item.id);
+
                   if (item.id !== 'ticket') {
                     setSelectedTicketId(null);
                   }
@@ -306,6 +320,7 @@ export default function App() {
             <div className="text-sm text-slate-500 font-semibold">
               Текущая роль
             </div>
+
             <h1 className="text-2xl font-black tracking-tight">
               {role === 'DISPATCHER'
                 ? 'Диспетчер Ольга'
